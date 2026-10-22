@@ -1,0 +1,44 @@
+{
+  "analysis_version": "2026-10-22-final-v3",
+  "input_dir": "data/inputs",
+  "output_dir": "results",
+  "population_weight": 0.5,
+  "selected_k": 4,
+  "k_candidates": [2, 3, 4, 5, 6],
+  "n_init": 50,
+  "random_state": 42,
+  "stability_seeds": [1, 7, 21, 99, 2026],
+  "if_estimators": 500,
+  "if_contamination": 0.05,
+  "signal_quantile": 0.75,
+  "signal_quantiles_sensitivity": [0.70, 0.75, 0.80],
+  "population_weights_sensitivity": [0.3, 0.5, 0.7],
+  "priority_quantile": 0.80,
+  "focus_quantile": 0.90,
+  "stop_radius_m": 500,
+  "route_poverty_max": 2,
+  "route_coordinate_review_tolerance_m": 100,
+  "medical_far_quantile": 0.75,
+  "road_distance_factors": [1.1, 1.3, 1.5],
+  "map_simplify_m": 100,
+  "carbon": {
+    "car_gco2_per_vehicle_km": 141.3,
+    "car_average_occupancy": 1.0,
+    "diesel_kgco2_per_l": 2.6003156666666665,
+    "electricity_gco2e_per_kwh": 417.3,
+    "diesel_drt_km_per_l": 8.0,
+    "electric_drt_kwh_per_km": 0.35,
+    "scenarios": [
+      {"scenario": "보수적", "adoption_rate": 0.10, "medical_round_trips_per_person_year": 6, "car_substitution_share": 0.30, "drt_average_occupancy": 2.0, "drt_deadhead_share": 0.40},
+      {"scenario": "기준", "adoption_rate": 0.25, "medical_round_trips_per_person_year": 12, "car_substitution_share": 0.60, "drt_average_occupancy": 3.0, "drt_deadhead_share": 0.25},
+      {"scenario": "확대", "adoption_rate": 0.40, "medical_round_trips_per_person_year": 18, "car_substitution_share": 0.90, "drt_average_occupancy": 4.0, "drt_deadhead_share": 0.15}
+    ]
+  },
+  "cases": [
+    {"slug": "iksan", "name": "익산시", "county_prefix": "35030", "HDCD": null, "boundary_file": "iksan_boundary.gpkg", "population_file": "iksan_population.gpkg", "stops_file": "iksan_stops.csv", "routes_file": "iksan_tago.xlsx", "population_year": 2024, "boundary_year": "2025-2Q", "transit_year": 2026},
+    {"slug": "gabuk", "name": "경남 거창군 가북면", "county_prefix": "38590", "HDCD": "38590410", "boundary_file": null, "population_file": "gabuk_population.gpkg", "stops_file": "gabuk_stops.csv", "routes_file": "../raw/tago_20261022/gabuk/route_stops.csv", "route_list_file": "../raw/tago_20261022/gabuk/route_list.csv", "route_metadata_file": "../raw/tago_20261022/gabuk/collection_summary.json", "route_snapshot": "2026-10-22", "population_year": 2024, "boundary_year": "2023-4Q", "grid_boundary_year": 2025, "transit_year": 2025, "transit_snapshot": "2025-10-31"},
+    {"slug": "yonghwa", "name": "충북 영동군 용화면", "county_prefix": "33540", "HDCD": "33540370", "boundary_file": null, "population_file": "yonghwa_population.gpkg", "stops_file": "yonghwa_stops.csv", "routes_file": "../raw/tago_20261022/yonghwa/route_stops.csv", "route_list_file": "../raw/tago_20261022/yonghwa/route_list.csv", "route_metadata_file": "../raw/tago_20261022/yonghwa/collection_summary.json", "route_snapshot": "2026-10-22", "population_year": 2024, "boundary_year": "2023-4Q", "grid_boundary_year": 2025, "transit_year": 2025, "transit_snapshot": "2025-10-31"},
+    {"slug": "gyeolseong", "name": "충남 홍성군 결성면", "county_prefix": "34560", "HDCD": "34560360", "boundary_file": null, "population_file": "gyeolseong_population.gpkg", "stops_file": "gyeolseong_stops.csv", "routes_file": "../raw/tago_20261022/gyeolseong/route_stops.csv", "route_list_file": "../raw/tago_20261022/gyeolseong/route_list.csv", "route_metadata_file": "../raw/tago_20261022/gyeolseong/collection_summary.json", "route_snapshot": "2026-10-22", "population_year": 2024, "boundary_year": "2023-4Q", "grid_boundary_year": 2025, "transit_year": 2025, "transit_snapshot": "2025-10-31"},
+    {"slug": "yeonghyeon", "name": "경남 고성군 영현면", "county_prefix": "38540", "HDCD": "38540360", "boundary_file": null, "population_file": "yeonghyeon_population.gpkg", "stops_file": "yeonghyeon_stops.csv", "routes_file": "../raw/tago_20261022/yeonghyeon/route_stops.csv", "route_list_file": "../raw/tago_20261022/yeonghyeon/route_list.csv", "route_metadata_file": "../raw/tago_20261022/yeonghyeon/collection_summary.json", "route_snapshot": "2026-10-22", "population_year": 2024, "boundary_year": "2023-4Q", "grid_boundary_year": 2025, "transit_year": 2025, "transit_snapshot": "2025-10-31"}
+  ]
+}

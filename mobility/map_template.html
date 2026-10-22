@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>고령층 의료이동 취약지역 선별 지도</title>
+<style>
+:root{font-family:"Apple SD Gothic Neo",AppleGothic,system-ui,sans-serif;color:#202020;background:#fff;font-size:15px}
+*{box-sizing:border-box}body{margin:0;padding:20px}h1{font-size:24px;margin:0 0 10px}p{line-height:1.6;margin:8px 0}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:12px 0}label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+select,button{font:inherit;padding:8px;border:1px solid #aaa;background:#fff;border-radius:3px;max-width:100%}button{cursor:pointer}
+main{display:grid;grid-template-columns:minmax(0,2fr) minmax(270px,1fr);gap:20px}#map{width:100%;height:72vh;min-height:400px;background:#f4f4f1;touch-action:none;border:1px solid #ccc}
+#regions path{stroke:#777;stroke-width:.3;vector-effect:non-scaling-stroke;cursor:pointer;fill:#ddd}#regions path:hover{stroke:#000;stroke-width:1.5}
+#grids path{stroke:#555;stroke-width:.7;vector-effect:non-scaling-stroke;cursor:pointer}#grids path:hover{stroke:#000;stroke-width:2}
+.selected{stroke:#000!important;stroke-width:2!important}.legend{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0;font-size:13px}.legend span{display:inline-flex;align-items:center;gap:5px}.swatch{width:14px;height:14px;display:inline-block;border:1px solid #777}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #ddd;padding:8px 4px;overflow-wrap:anywhere}th{width:48%;font-weight:500}
+#detail{min-width:0}#detail h2{font-size:20px;margin-top:0}.note{font-size:13px;color:#555}.warning{color:#7a301f;font-size:14px}details{margin-top:15px}summary{cursor:pointer}
+@media(max-width:760px){body{padding:12px}main{grid-template-columns:1fr}#map{height:55vh;min-height:350px}h1{font-size:21px}select{width:100%}label{width:100%}}
+</style></head>
+<body>
+<h1>고령층 의료이동 취약지역 선별</h1>
+<p>전국 AI 유형화와 비수도권 읍·면 정책검토 후보를 구분해서 확인함. 정책검토 등급은 AI의 자동 처방이 아니라 별도 연구자 기준임.</p>
+<div class="controls">
+<label>표시 기준 <select id="layer"><option value="tier">정책검토 등급</option><option value="cluster">AI 취약유형</option><option value="medical">기초의료시설 직선거리</option><option value="quality">추가 품질확인</option><option value="local" hidden>격자 접근성 유형 (별도 규칙)</option></select></label>
+<label>분석 범위 <select id="scope"><option value="national">전국 읍면동</option></select></label>
+<button id="reset" type="button">전국 보기</button>
+<button id="zoom-in" type="button" aria-label="지도 확대">확대 +</button><button id="zoom-out" type="button" aria-label="지도 축소">축소 −</button>
+</div>
+<div id="legend" class="legend" aria-label="범례"></div>
+<main>
+<div><svg id="map" viewBox="-10 -10 __PADDED_WIDTH__ __PADDED_HEIGHT__" role="img" aria-label="전국 읍면동과 사례지역 격자 지도. 확대·이동 후 지역을 클릭하면 근거가 표시됨"><g id="viewport"><g id="regions" fill-rule="evenodd">__PATHS__</g><g id="grids" fill-rule="evenodd"></g></g></svg>
+<p class="note">휠·핀치로 확대, 드래그로 이동, 지역 클릭으로 상세 확인. 실제 SGIS 경계를 EPSG:5179로 투영함. 표시만 100m 단순화하며 계산은 원 도형을 사용함. 도로·실제 보행경로 지도는 아님.</p></div>
+<section id="detail" aria-live="polite"><h2>지역을 선택해줘</h2><p>국가 전체의 유형화와 1,247개 비수도권 읍·면의 정책선별 범위는 다름. 상세 격자가 없는 지역을 저위험으로 해석하지 않음.</p></section>
+</main>
+<details><summary>분석 범위·출처·한계</summary>
+<p>전국 인구·KTDB·읍면동 경계: 2023년. 의료시설·약국: HIRA 2025년 12월. 격자인구: 2024년. 익산 읍면동 경계: 2025년 2분기, 정류장·노선: 2026년 수집(통계 기준일 미확인). 추가 네 사례: 격자판 2025년·읍면동 경계 2023년 4분기·정류장 2025-10-31·노선 2026-10-22 조회. 서로 다른 시점을 같은 시점의 현황으로 간주하지 않음.</p>
+<p>전국 의료거리는 읍면동 내부 대표점, 격자 의료거리는 1km 격자 중심점 기준의 직선거리임. 주민 평균거리·실제 이용 병원·진료 가능 여부를 뜻하지 않음. KTDB 시간비는 시설유형별 평균지표 비율이며 동일 병원에 대한 개별 OD 시간비가 아님.</p>
+<p>집중검토: 범위 내 종합점수 상위 10% 및 3신호 중첩. 우선검토: 상위 20% 및 2신호 이상 중첩(집중검토 제외). 75백분위 신호 기준은 공식 위험 임계값이 아니라 연구자의 상대적 기준임. 상세 수치는 screening_thresholds.json에 기록됨.</p>
+<p>Isolation Forest는 특이패턴 표시이며 고위험 판정이 아님. 정책 후보는 현장검토용이며 예산·노선·도로·차량·운전자 조건을 확인한 확정안이 아님.</p>
+<p>홍성군 원 응답의 64개 동일키 충돌 그룹은 원문을 보존하고 관련 정류장 ID의 관계를 분석에서 격리함. 노선 연결 미확인·좌표 차이 100m 초과는 별도 표시함. 이 허용차는 품질검토 설정이지 교통 위험 임계값이 아님. 노선 수는 확보한 등록 노선 범위의 관측값이며 실제 운행횟수·인접 군 노선 전수를 뜻하지 않음.</p>
+<p>공식 출처: <a href="https://sgis.mods.go.kr/view/pss/downloadList">SGIS</a>, <a href="https://www.ktdb.go.kr/">KTDB</a>, <a href="https://www.data.go.kr/data/15098529/openapi.do">TAGO 노선</a>, <a href="https://www.data.go.kr/data/15067528/fileData.do">국토부 정류장</a>. 지도 자체에는 외부 연결·API 키가 필요하지 않음.</p>
+</details>
+<script id="analysis-data" type="application/json">__DATA__</script>
+<script>
+'use strict';
+const data=JSON.parse(document.getElementById('analysis-data').textContent);
+const svg=document.getElementById('map'),viewport=document.getElementById('viewport'),grids=document.getElementById('grids');
+const layer=document.getElementById('layer'),scope=document.getElementById('scope'),detail=document.getElementById('detail');
+const initial=svg.getAttribute('viewBox'); let view=initial.split(' ').map(Number),selected=null;
+const tierColors={'집중검토':'#a83732','우선검토':'#d79c4d','관찰':'#d7dccd','정책선별 범위 밖':'#e1e1e1','분석 제외':'#aaa'};
+const clusterColors={'상대 저취약형':'#c4d9ce','인구취약 우세형':'#dfba81','위치취약 우세형':'#aeb9d2','인구·위치 복합취약형':'#bb7871','분석 제외':'#aaa'};
+const gridColors={'고령·의료·정류장 복합고위험형':'#9a3630','고령·기초의료 접근 우선검토형':'#d08b43','정류장 접근 우선검토형':'#dcbd84','노선공급 우선검토형':'#879cb6','읍면동 대중교통 장시간형':'#b8c4ce','현행 유지·추가 모니터링':'#d9e1d6','인구 0명·분석 제외':'#bbb'};
+function fmt(x,suffix=''){if(x==null)return '자료 없음';if(typeof x==='boolean'||x==='True'||x==='False')return x===true||x==='True'?'해당':'미해당';return typeof x==='number'?x.toLocaleString('ko-KR',{maximumFractionDigits:2})+suffix:String(x)}
+function yearText(x){return x==null?'자료 없음':String(x)}
+function ptTimeText(r){return fmt(r['22_pt_time_min'],'분')+(r['22_pt_time_min_censored']?' (상한처리·120분 초과 가능)':'')}
+function addTable(rows){const table=document.createElement('table'); for(const [key,value]of rows){const tr=table.insertRow(),th=document.createElement('th'),td=tr.insertCell();th.textContent=key;td.textContent=value;tr.prepend(th)} detail.append(table)}
+function heading(text){detail.replaceChildren();const h=document.createElement('h2');h.textContent=text;detail.append(h)}
+function note(text,warning=false){const p=document.createElement('p');p.className=warning?'warning':'note';p.textContent=text;detail.append(p)}
+function caseLink(item){const button=document.createElement('button');button.type='button';button.textContent=item.name+' 1km 상세 보기';button.addEventListener('click',()=>{scope.value=item.slug;setScope()});detail.append(button)}
+function carbonDetail(slug){const rows=data.carbon.filter(r=>r.case_slug===slug);if(!rows.length)return;const box=document.createElement('details'),title=document.createElement('summary');title.textContent='이 사례 전체의 조건부 이동지원·탄소 시나리오';box.append(title);const table=document.createElement('table');for(const r of rows){const row=table.insertRow(),label=document.createElement('th'),value=row.insertCell();label.textContent=r.scenario;value.textContent='가정 이용자 '+fmt(r.expected_users_assumed,'명')+', 연간 지원 왕복 '+fmt(r.annual_round_trips_assumed,'회')+'; 디젤 순변화 '+fmt(r.diesel_drt_net_change_tco2_year,' tCO₂/년')+', 전기 순변화 '+fmt(r.electric_drt_net_change_tco2e_year,' tCO₂e/년');row.prepend(label)}box.append(table);const p=document.createElement('p');p.className='note';p.textContent='해당 사례 의료지원 대상 '+fmt(rows[0].target_grid_count)+'개 격자 전체의 가정 계산임. 선택한 한 격자의 효과가 아님. 거리계수 1.3, +는 배출 증가, −는 감소. 이용률·왕복·자동차대체·합승·추가 공차 가정에 따라 달라짐. 실제 이용 증가·건강 개선·시간단축의 실증값 또는 전과정평가가 아님.';box.append(p);detail.append(box)}
+function nationalDetail(code){const r=data.national[code];if(!r)return;heading([r.HDCD_SD_NM,r.HDCD_SGG_NM,r.HDCD_EMD_NM].filter(x=>x&&x!=='-').join(' '));
+addTable([['정책검토 등급',r.revised_priority_tier],['AI 유형',r.balanced_cluster_type],['인구취약성',fmt(r.population_vulnerability_score,'점')],['이동취약성',fmt(r.location_vulnerability_score,'점')],['종합취약성',fmt(r.overall_vulnerability_score,'점')],['전체 / 65세 이상 인구',fmt(r.total_population)+' / '+fmt(r.elderly_population)+'명'],['고령인구 비율',fmt(r.elderly_ratio_pct,'%')],['고령 / 의료 / 교통 신호',[r.population_signal,r.medical_signal,r.transport_signal].map(x=>fmt(x)).join(' / ')],['최근접 기초의료시설',fmt(r.nearest_primary_care_distance_m,'m (대표점 직선거리)')],['시설 수: 엄격 내부 / 경계보완',fmt(r.primary_care_count_strict_within)+' / '+fmt(r.primary_care_count_2025)],['병·의원 대중교통 평균시간',ptTimeText(r)],['동일 시설유형 PT/자동차 비',fmt(r['22_time_gap_ratio'],'배')],['특이패턴 (고위험 아님)',fmt(r.balanced_isolation_forest_anomaly_5pct)],['9개 기준 조합에서 선별 비율',r.selection_frequency==null?'범위 밖':fmt(r.selection_frequency*100,'%')],['조건부 정책 후보',r.policy_candidate_primary||'이번 정책선별 범위 밖']]);
+note('전국 지표 2023년 + 의료시설 2025년. 정책검토 등급은 군집 결과가 아닌 종합점수와 별도 세 신호로 결정함.');
+if(r.core_signal_count!=null){const t=data.thresholds;note('신호 기준: 고령비율 ≥ '+fmt(t.elderly_ratio_p,'%')+'; 의료거리 ≥ '+fmt(t.primary_distance_p_m,'m')+' 또는 내부시설 0개; PT 시간 ≥ '+fmt(t.pt_time_p_min,'분')+' 또는 시간비 ≥ '+fmt(t.time_gap_p,'배')+'. 종합점수 우선 ≥ '+fmt(t.overall_p80)+' / 집중 ≥ '+fmt(t.overall_p90)+'.')}
+if(r.incomplete_indicator_flag)note('일부 원지표 결측. 이용 가능한 지표 수를 결과표에서 확인해야 함.',true);
+const item=data.cases.find(x=>x.HDCD===code);if(item&&!data.local[item.slug])note('선정된 추가 사례이지만 현재 1km 격자·정류장 입력이 미확보되어 상세 분석은 미완료임.',true);
+const localCase=item||data.cases.find(x=>x.slug==='iksan'&&code.startsWith(x.county_prefix));if(localCase&&data.local[localCase.slug])caseLink(localCase);
+}
+function localDetail(slug,id){const r=data.local[slug][id];heading(r.case_name+' / '+id);addTable([['격자 유형',r.recalibrated_priority_type],['공급 분류',r.bus_supply_type],['인구자료 상태',r.population_status],['전체 / 고령인구',fmt(r.total_population)+' / '+fmt(r.elderly_population)+'명'],['고령인구 비율',fmt(r.elderly_ratio_analysis_pct,'%')],['고령인구 > 전체 품질표시',fmt(r.elderly_gt_total_flag)],['최근접 정류장 직선거리',fmt(r.nearest_stop_distance_m_recalculated,'m')],['500m 정류장 / 고유노선',fmt(r.stops_within_500m)+' / '+fmt(r.routes_within_500m)],['노선 수 해석',r.route_count_interpretation],['500m 노선 미연결 / 충돌 / 좌표검토 정류장',fmt(r.unmatched_stop_count_within_500m)+' / '+fmt(r.conflict_stop_count_within_500m)+' / '+fmt(r.position_review_stop_count_within_500m)],['최근접 기초의료시설',r.nearest_primary_care_name],['기초의료시설 직선거리',fmt(r.nearest_primary_care_distance_m,'m')],['최근접 약국',r.nearest_pharmacy_name],['약국 직선거리',fmt(r.nearest_pharmacy_distance_m,'m')],['읍면동 병의원 PT 평균 (격자 실측 아님)',ptTimeText(r)],['조건부 정책 후보',r.recalibrated_policy_candidate],['인구 / 정류장 자료 연도',yearText(r.population_year)+' / '+yearText(r.transit_year)],['정류장 수집 기준일',r.transit_snapshot],['노선 조회·수집 기준',r.route_snapshot],['읍면동 경계 기준',r.boundary_period],['격자판 연도',yearText(r.grid_boundary_year)]]);note('SGIS 비밀보호 처리 인구 기반 추정치. 중심점의 거리를 격자 주민 모두의 실제 거리로 해석하지 않음.');if(!r.valid_population)note('인구 0명·미수록·결측 등 분석 제외 격자임. 위치정보가 있다고 유효인구가 확인된 것은 아님.',true);if(!r.route_data_available)note('노선관계 자료 미확보. 노선 수는 0이 아닌 결측임.',true);else if(r.route_coverage_unknown_flag)note('반경 안 노선 연결 또는 좌표에 불확실성이 있어 노선 수는 관측 하한이며 노선 빈곤으로 확정하지 않음.',true);if(!r.route_source_collection_complete)note('기존 노선목록 일부의 경유자료가 없어 노선목록 전체의 완전 수집으로 볼 수 없음.',true);if(r.route_source_conflict_key_groups)note('군 원 응답에 '+fmt(r.route_source_conflict_key_groups)+'개 동일키 충돌 그룹이 있어 충돌 정류장 ID의 관계를 격리했음. 원자료와 격리표를 함께 보존함.',true);carbonDetail(slug)}
+function palette(){if(scope.value!=='national')return gridColors;if(layer.value==='cluster')return clusterColors;if(layer.value==='medical')return {'1km 이하':'#e4eadb','1~3km':'#d4c192','3km 초과':'#a95849','자료 없음':'#aaa'};if(layer.value==='quality')return {'추가 확인':'#c17b55','기본 확인':'#d6dfd7'};return tierColors}
+function color(r){if(layer.value==='cluster')return clusterColors[r.balanced_cluster_type]||'#aaa';if(layer.value==='medical'){const d=r.nearest_primary_care_distance_m;return d==null?'#aaa':d<=1000?'#e4eadb':d<=3000?'#d4c192':'#a95849'}if(layer.value==='quality')return r.incomplete_indicator_flag?'#c17b55':'#d6dfd7';return tierColors[r.revised_priority_tier]||'#aaa'}
+function render(){document.querySelectorAll('#regions path').forEach(p=>p.style.fill=scope.value==='national'?color(data.national[p.dataset.code]):'#e3e3e3');document.getElementById('legend').replaceChildren();for(const [name,c]of Object.entries(palette())){const s=document.createElement('span'),sw=document.createElement('i');sw.className='swatch';sw.style.background=c;s.append(sw,document.createTextNode(name));document.getElementById('legend').append(s)}}
+function setView(v){view=v;svg.setAttribute('viewBox',v.join(' '))}
+function setScope(){const slug=scope.value;layer.disabled=slug!=='national';if(selected)selected.classList.remove('selected');selected=null;grids.innerHTML=slug==='national'?'':data.local_paths[slug]||'';if(slug==='national'){if(layer.value==='local')layer.value='tier';setView(initial.split(' ').map(Number));heading('전국 읍면동');note('지역을 클릭하면 원자료·점수·신호·실제 임계값을 확인할 수 있음.')}else{layer.value='local';const b=data.local_boxes[slug];setView([b[0]-b[2]*.08,b[1]-b[3]*.08,b[2]*1.16,b[3]*1.16]);grids.querySelectorAll('path').forEach(p=>p.style.fill=gridColors[data.local[slug][p.dataset.grid].recalibrated_priority_type]||'#ddd');heading(data.cases.find(x=>x.slug===slug).name+' 1km 격자');note('격자를 클릭하면 인구·정류장·의료시설 접근성과 품질표시를 확인할 수 있음. 이 격자 유형은 전국 AI 유형과 다른 상세 규칙임.');const s=data.status.find(x=>x.case_slug===slug);if(s)note('전체 '+fmt(s.grid_count)+'격자, 유효인구 '+fmt(s.valid_population_grid_count)+'격자. 노선 기준 '+s.route_snapshot+'.');carbonDetail(slug)}render()}
+for(const item of data.cases){const option=document.createElement('option');option.value=item.slug;option.disabled=!data.local[item.slug];option.textContent=item.name+(option.disabled?' — 상세자료 미확보':' — 1km 격자');scope.append(option)}
+layer.addEventListener('change',render);scope.addEventListener('change',setScope);document.getElementById('reset').addEventListener('click',()=>{scope.value='national';setScope()});
+svg.addEventListener('click',e=>{if(dragMoved)return;const p=e.target.closest('path')||document.elementFromPoint(e.clientX,e.clientY)?.closest('path');if(!p||!svg.contains(p))return;if(selected)selected.classList.remove('selected');selected=p;p.classList.add('selected');if(p.dataset.grid)localDetail(p.dataset.case,p.dataset.grid);else nationalDetail(p.dataset.code)});
+function point(e){const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse())}
+function zoom(f){const w=view[2]*f,h=view[3]*f;if(w<2||w>__WIDTH__*3)return;setView([view[0]+(view[2]-w)/2,view[1]+(view[3]-h)/2,w,h])}
+document.getElementById('zoom-in').addEventListener('click',()=>zoom(.8));document.getElementById('zoom-out').addEventListener('click',()=>zoom(1.25));
+svg.addEventListener('wheel',e=>{e.preventDefault();const p=point(e),f=e.deltaY>0?1.15:.87;const w=view[2]*f,h=view[3]*f;if(w<2||w>__WIDTH__*3)return;setView([p.x-(p.x-view[0])*f,p.y-(p.y-view[1])*f,w,h])},{passive:false});
+let drag=null,dragMoved=false;const touches=new Map();let pinch=null;
+svg.addEventListener('pointerdown',e=>{touches.set(e.pointerId,{x:e.clientX,y:e.clientY});dragMoved=false;drag={x:e.clientX,y:e.clientY,v:[...view]};if(touches.size===2){const a=[...touches.values()];pinch={distance:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),v:[...view]}}svg.setPointerCapture(e.pointerId)});
+svg.addEventListener('pointermove',e=>{if(!touches.has(e.pointerId))return;touches.set(e.pointerId,{x:e.clientX,y:e.clientY});if(touches.size===2&&pinch){const a=[...touches.values()],distance=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),f=pinch.distance/distance,v=pinch.v;if(v[2]*f>2&&v[2]*f<__WIDTH__*3)setView([v[0]+v[2]*(1-f)/2,v[1]+v[3]*(1-f)/2,v[2]*f,v[3]*f]);dragMoved=true;return}if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>5)dragMoved=true;const rect=svg.getBoundingClientRect();const unit=Math.max(drag.v[2]/rect.width,drag.v[3]/rect.height);setView([drag.v[0]-dx*unit,drag.v[1]-dy*unit,drag.v[2],drag.v[3]])});
+for(const name of ['pointerup','pointercancel'])svg.addEventListener(name,e=>{touches.delete(e.pointerId);drag=null;pinch=null});
+render();
+</script></body></html>

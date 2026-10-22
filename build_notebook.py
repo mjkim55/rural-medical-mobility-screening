@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""실제 함수·실제 결과와 설명을 연결한 최종 검토 노트북을 생성한다."""
+from pathlib import Path
+import nbformat as nbf
+
+ROOT = Path(__file__).resolve().parent
+
+
+def main():
+    md, code = nbf.v4.new_markdown_cell, nbf.v4.new_code_cell
+    cells = [
+        md("""# 고령층 의료이동 취약지역 선별 분석
+전국 읍면동 유형화 → 비수도권 읍·면 후보 선별 → 익산·추가 네 사례의 1km 상세 분석 → 조건부 정책·탄소 검토.
+
+분석판: 2026-10-22 최종본. TAGO 추가 539개 노선의 수집자료를 실제 연결함. 원자료·계산·정책 판단·가정을 구분하며 예산 최적화나 정책효과의 인과추정은 수행하지 않음.
+
+이 노트북은 실행 결과 확인용임. 공개 코드 노트북은 출력·인증정보 없이 별도로 유지함. 공식 입력 확보 방법과 사용조건은 README 및 docs/INPUTS.md, 정의는 docs/METHODS.md, 출처는 docs/SOURCES.md를 참고함."""),
+        code("""from pathlib import Path
+import os, sys, json, inspect
+from IPython.display import display, Code, Image, IFrame
+import pandas as pd
+
+# 저장소 루트 또는 그 하위 results에서 실행할 수 있도록 프로젝트를 찾음.
+ROOT = next(p for p in [Path.cwd(), Path.cwd().parent] if (p / 'config.json').exists())
+os.chdir(ROOT)
+sys.path.insert(0, str(ROOT))
+from mobility.common import read_config
+from mobility import national, local, routes, scenarios
+config = read_config(ROOT / 'config.json')
+inputs, output = ROOT / config['input_dir'], ROOT / config['output_dir']
+
+# 기존 공통 원자료 목록과 새 사례의 서로 다른 기준시점을 함께 확인함.
+display(pd.read_csv(inputs / 'input_manifest.csv')[['file_name','role','period','origin']])
+display(pd.DataFrame(config['cases'])[['name','population_year','boundary_year','transit_snapshot','route_snapshot']])"""),
+        md("""## 1. 연구 개념과 원자료 EDA
+인구취약성은 고령화와 저밀도 분산거주, 이동취약성은 의료·생활시설·거점에 대한 대중교통 접근조건을 나타냄. 의료시설의 존재·유형·위치를 다루며 의료의 질·진료 가능 여부·실제 이용은 관측하지 않음.
+
+`prepare_inputs.py --mode raw`는 실제 KTDB 3개 XLSX를 복합키로 수단별 피벗하고 행안부 인구를 결합함. PT/자동차 시간비는 같은 시설유형의 평균지표 비율이며 동일 개별 병원에 대한 개인별 OD 비교가 아님. 결측과 0, `>120` 상한처리를 구분함."""),
+        code("""raw = pd.read_csv(inputs / 'national_base.csv', dtype={'HDCD':'string'})
+display(raw[['HDCD','HDCD_SD_NM','HDCD_SGG_NM','HDCD_EMD_NM','total_population','elderly_population','22_pt_time_min','22_time_gap_ratio']].head())
+display(raw[['total_population','elderly_population','22_pt_time_min','22_time_gap_ratio']].describe())
+
+from run_analysis import run
+# 새 노선 CSV까지 실제 읽어 전 과정을 실행함. strict는 사례·노선 계산 미완료 시 실패함.
+# strict 성공이 원자료 무오류·현재 운행·정책효과 검증을 뜻하지는 않음.
+summary = run(ROOT / 'config.json', strict=True)
+display(summary)
+nation = pd.read_csv(output / 'national_results.csv', dtype={'HDCD':'string'})
+display(nation[national.POPULATION_FEATURES + national.MOBILITY_FEATURES].describe())
+display(Image(filename=str(output / 'figures/national_two_axis_clusters.png')))"""),
+        md("""## 2. 인구취약성·이동취약성·Overall
+인구 영역은 고령화율과 `-ln(1+인구밀도)`의 2지표, 이동 영역은 병·의원 PT시간·PT/자동차 시간비·30분 도달률 격차·종합병원 PT시간·생활시설·거점 PT시간의 6지표임. 큰 값이 취약한 방향으로 전국 백분위를 계산한 뒤 영역별로 평균함.
+
+`Overall = 0.5×Population + 0.5×Mobility`는 두 영역을 동등하게 고려한 기준모형이며 최적가중을 학습한 결과가 아님. 원지표 개수가 2 대 6이라는 이유로 이동 영역이 자동으로 3배 가중되지 않도록 먼저 영역을 요약함. 평균은 상쇄될 수 있어 Overall을 K-means에 넣지 않음. 단조 로그변환 자체는 백분위 순위를 바꾸지 않으므로 로그가 최종 순위의 극단값을 완화했다고 주장하지 않음."""),
+        code("""# 설명용 별도 코드가 아니라 실제 실행 함수의 # 주석과 계산식을 그대로 표시함.
+display(Code(inspect.getsource(national.score_national), language='python'))
+dictionary = pd.read_csv(output / 'variable_dictionary.csv')
+display(dictionary.loc[dictionary['variable'].isin(national.POPULATION_FEATURES + national.MOBILITY_FEATURES + national.SCORE_COLUMNS + ['overall_vulnerability_score'])])
+display(nation[['HDCD'] + national.SCORE_COLUMNS + ['overall_vulnerability_score','population_indicator_available_count','mobility_indicator_available_count']].head())"""),
+        md("""## 3. K-means·Isolation Forest와 검증
+정답 라벨 없이 두 취약구조의 유사성을 탐색하는 비지도학습임. 두 영역 점수만 StandardScaler로 표준화하여 입력함. K=2~6, n_init=50, 난수 42를 사용함. K=4는 정책적 해석을 위한 선택이며 실루엣 최고 K와 구분함. 5개 난수에 대한 ARI는 초기값 안정성이지 외부 정확도나 네 유형이 정답이라는 증거가 아님.
+
+Isolation Forest는 같은 두 축의 특이패턴을 표시함. 트리 500개·contamination 0.05는 약 5%를 표시하도록 설정한 값이지 실제 고위험률 추정이 아님. 군집·IF는 아래 정책선별식의 직접 조건이 아니며 AI의 추가효용이 입증됐다고 주장하지 않음."""),
+        code("""display(Code(inspect.getsource(national.cluster_national), language='python'))
+display(pd.read_csv(output / 'kmeans_validation.csv'))
+display(pd.read_csv(output / 'cluster_profiles.csv'))
+display(pd.read_csv(output / 'cluster_stability.csv'))"""),
+        md("""## 4. 비수도권 읍·면의 세 신호·후보·정책
+고령층 기초의료 이동지원이라는 연구 범위에 따라 비수도권 읍·면을 별도로 검토함. 수도권이 무취약하다는 뜻이나 의료접근 취약성이 오직 지방에만 있다는 결론이 아님.
+
+고령 신호는 범위 내 고령화율 Q75 이상, 의료 신호는 대표점 기초의료시설 거리 Q75 이상 또는 내부 시설 0개, 교통 신호는 병·의원 PT시간 또는 PT/자동차 시간비 Q75 이상임. Overall Q90 이상+3신호는 집중검토, Q80 이상+2신호 이상은 우선검토(집중 제외)임. 모두 연구자 상대 기준임. 신호 Q70/75/80×인구 가중 0.3/0.5/0.7의 9조합과 엄격 경계 내부 시설 집계 민감도를 공개함.
+
+정책은 공공택시·의료목적 합승 DRT·기존 버스 연계 등 조건부 비교 후보임. 정류장 설치 지점·최선 정책·예산·운행능력을 확정한 처방이 아님."""),
+        code("""display(Code(inspect.getsource(national.screen_rural), language='python'))
+display(json.loads((output / 'screening_thresholds.json').read_text(encoding='utf-8')))
+display(pd.read_csv(output / 'threshold_weight_sensitivity.csv'))
+display(pd.read_csv(output / 'eda_capital_rural_comparison.csv'))
+display(pd.read_csv(output / 'four_case_selection_basis.csv'))
+candidates = pd.read_csv(output / 'selected_policy_candidates.csv', dtype={'HDCD':'string'})
+display(candidates[['HDCD','HDCD_SGG_NM','HDCD_EMD_NM','overall_vulnerability_score','core_signal_count','revised_priority_tier','policy_candidate_primary']].head(20))"""),
+        md("""## 5. 실제 노선자료 연결·충돌 격리
+추가 네 군에서 노선목록 539개와 경유 24,073행을 수집함. 2025-10-31 정류장 좌표와 2026-10-22 노선 조회시점을 구분함. `routeid·nodeid·nodeord`가 같은데 명칭·좌표 등이 다르면 충돌 정류장 ID의 관계를 격리하고 원문을 보존함. 홍성군은 64개 충돌 그룹·48개 ID·128행임. 첫 행 선택·좌표 평균으로 보정하지 않음.
+
+노선 수는 반경 500m 안 정류장들의 고유 routeid 합집합임. 최근접 정류장 노선 수, 관계 레코드 수, 실제 운행횟수는 서로 다름. 연결 누락·충돌·같은 ID 좌표 차이 100m 초과는 품질표시하며 이 경우 적은 관측 노선 수를 곧 노선 빈곤으로 확정하지 않음. 100m는 품질검토 허용차 설정이지 정책 위험기준이 아님. 동일 ID 일치가 현재 운행·인접 군 노선 전수 수집을 보증하지 않음."""),
+        code("""display(Code(inspect.getsource(routes.quarantine_relations), language='python'))
+display(Code(inspect.getsource(local.stop_supply), language='python'))
+display(pd.read_csv(output / 'case_completion_status.csv'))
+for case in config['cases']:
+    path = output / 'cases' / case['slug'] / 'route_input_summary.json'
+    if path.exists():
+        display(json.loads(path.read_text(encoding='utf-8')))
+display(pd.read_csv(output / 'cases/gyeolseong/route_input_conflicts.csv').head(8))"""),
+        md("""## 6. 익산·추가 네 사례의 동일한 1km 절차
+네 추가 사례는 151개 정책검토 후보 중 서로 다른 신호조합의 목적표집이며 전국 대표표본·K-means 네 군집 대표가 아님. 실제 SGIS 2025 격자판의 GRID_CD와 보유한 2024 인구표 grid_id를 일대일 결합함. 읍면동 경계는 추가 사례 2023Q4·익산 2025Q2이며 격자판 연도와 인구연도를 혼동하지 않음.
+
+중심점이 행정경계 안에 있는 1km 격자를 배정함. 경계 일부 격자·인구 미수록·0명·고령인구>총인구를 구분함. 원 인구는 보존하고 비정상 고령화율은 결측으로 둠. 중심점 거리를 실제 주민 보행·의료여행시간으로 부르지 않음. 고령·의료 Q75는 사례 내부 상대 기준이므로 지역 간 비교에는 의료 절대거리 1·3·5km를 함께 봄."""),
+        code("""display(pd.read_csv(output / 'case_comparison.csv'))
+for case in config['cases']:
+    directory = output / 'cases' / case['slug']
+    print(case['name'])
+    display(pd.read_csv(directory / 'policy_type_summary.csv'))
+    display(pd.read_csv(directory / 'bus_supply_summary.csv'))
+    display(pd.read_csv(directory / 'medical_distance_sensitivity.csv'))
+# 아래는 격자 준비 단계의 인구 결합 감사만 표시함. 노선 상태는 위 최종 실행표를 따름.
+audit = pd.read_csv(inputs / 'additional_case_audit/grid_preparation_summary.csv')
+display(audit[['case_name','centroid_grid_count','population_record_matched','population_record_absent','valid_population_grid_count','elderly_gt_total_flag_count','grid_boundary_year','population_year','emd_boundary_period']])"""),
+        md("""## 7. 조건부 이동지원 규모와 탄소
+탄소는 취약점수·AI 입력에 넣지 않고 정책후보 선택 후 운영조건을 비교하는 사후 시나리오임. 대상 고령인구×가정 이용률×연간 왕복횟수×2×의료시설 직선거리×거리계수로 연간 승객-km를 계산함. 탑승인원으로 차량-km를 환산하고 추가 공차를 반영한 뒤 DRT 배출에서 대체 자동차 배출을 뺌.
+
+`drt_deadhead_share = 공차 차량km / 승객탑승 차량km`, 전체거리 중 공차 몫은 d/(1+d)임. 거리계수 1.1/1.3/1.5와 합승·대체율·추가 공차 36조합을 비교함. 거리계수만 공통으로 바꾸면 배출 크기는 변하지만 부호는 변하지 않음.
+
+예상 이용자·지원 왕복은 시나리오상 규모이며 관측된 이용 증가·건강 개선·시간 단축이 아님. 승용차 직접 CO2·전력 CO2e의 범위 차이가 있고 차량 제조·인프라·상류배출을 모두 포함한 LCA가 아님. 탄소만으로 최선 정책을 선택하지 않음."""),
+        code("""display(Code(inspect.getsource(scenarios.calculate_scenario), language='python'))
+carbon = pd.read_csv(output / 'carbon_distance_scenarios.csv')
+display(carbon.loc[carbon['target_group'].eq('의료지원 대상 전체') & carbon['road_distance_factor'].eq(1.3), ['case_slug','scenario','target_grid_count','eligible_elderly_sgis_estimate','expected_users_assumed','annual_round_trips_assumed','annual_passenger_km','diesel_drt_net_change_tco2_year','electric_drt_net_change_tco2e_year']])
+display(pd.read_csv(output / 'carbon_operating_condition_sensitivity.csv').head(12))
+display(Image(filename=str(output / 'figures/iksan_carbon_distance_sensitivity.png')))"""),
+        md("""## 8. 최종 품질검사·변수 사전·재현성
+오류와 남은 검증 경고를 분리함. 익산 기존 일부 노선 경유자료 누락·정류장 기준일 미확인·1개 유효 격자의 노선 연결 추가확인과 홍성 원 응답 충돌은 숨기지 않음. 계산 성공은 원자료가 완벽하다는 뜻이 아님. 입력 SHA-256·설정·실행 환경을 결과 폴더에 기록함."""),
+        code("""quality = pd.read_csv(output / 'quality_checks.csv')
+display(quality)
+display(quality.loc[~quality['passed']])
+display(dictionary)
+display(json.loads((output / 'runtime_versions.json').read_text(encoding='utf-8')))
+assert not ((~quality['passed']) & quality['severity'].eq('error')).any()
+assert summary['all_cases_route_analysis_complete']
+print('필수 계산 완료. 남은 경고는 별도 확인 필요.')"""),
+        md("""## 9. 최종 클릭지도와 공개 준비
+전국 AI 유형·비수도권 정책검토 등급·기초의료시설 거리를 구분함. 사례 지역을 선택하거나 전국 상세창의 버튼으로 들어가면 1km 격자별 인구·의료·정류장·노선·품질표시를 볼 수 있음. 탄소는 선택한 한 격자가 아니라 해당 사례 의료지원 대상 전체의 조건부 시나리오임.
+
+지도는 외부 타일·CDN·API 키 없이 열리는 독립 파일임. 공개 ZIP은 코드·깨끗한 노트북·문서·합성 단위검사만 포함하며 원자료·실행 출력·지도 파생자료는 제외함. 실제 GitHub 업로드나 공개 열람 링크 생성은 수행하지 않음. SGIS 출처·연구 완료 후 결과물 제출 조건 및 공개 가능 범위를 별도 준수해야 함."""),
+        code("""# 실행 노트북을 저장소 루트에 보관하면 아래 상대경로가 그대로 작동함.
+# 별도 열기: results/national_interactive_map.html
+display(IFrame(src='results/national_interactive_map.html', width='100%', height=800))"""),
+    ]
+    notebook = nbf.v4.new_notebook(cells=cells)
+    notebook.metadata = {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+                         "language_info": {"name": "python", "version": "3.11"}}
+    nbf.write(notebook, ROOT / "analysis.ipynb")
+    print("최종 analysis.ipynb 생성 완료")
+
+
+if __name__ == "__main__":
+    main()
